@@ -3,7 +3,7 @@ import json
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 from semantic_kernel.semantic_kernel_module import SemanticKernelModule
-from taskweaver.taskweaver_module import TaskweaverModule
+from taskweaver.taskweaver_module import TaskWeaverDataProcessor
 from agent_builder import AgentBuilder
 from autogen.agentchat.contrib.retrieve_assistant_agent import RetrieveAssistantAgent
 from autogen.agentchat.contrib.retrieve_user_proxy_agent import RetrieveUserProxyAgent
@@ -138,7 +138,7 @@ class AutoGenModule:
         f"Reply TERMINATE when the task is done."
     )
 
-    def __init__(self, memgpt_memory_path: str, openai_api_key: str): # needs to be more clear
+    def __init__(self, memgpt_memory_path: str, openai_api_key: str): 
         self.kernel = kernel
         self.llm_config = llm_config or {}
         self.builder_config_path = builder_config_path
@@ -146,20 +146,9 @@ class AutoGenModule:
         self.semantic_kernel = SemanticKernelModule()
         self.taskweaver = TaskweaverModule()
         self.agent_builder = AgentBuilder()
-        self.vector_index = index  # Integrated VectorStoreIndex
+        self.vector_index = index  
         self.memgpt_memory_manager = MemGPTMemoryManager(memgpt_memory_path)
-
-        # Load API keys from environment variables and update the configuration list
-        with open('OAI_CONFIG_LIST.json', 'r') as config_file:
-            config_list = json.load(config_file)
-        for config in config_list:
-            if 'api_key' in config:
-                env_api_key = os.getenv(config['model'].upper().replace('-', '_') + '_API_KEY')
-                if env_api_key:
-                    config['api_key'] = env_api_key
-        with open('OAI_CONFIG_LIST.json', 'w') as config_file:
-            json.dump(config_list, config_file, indent=4)
-        # MemGPT Configuration
+        os.environ['OPENAI_API_KEY'] = openai_api_key
         self.memgpt_config = {
             "model": "gpt-4",
             "preset": "memgpt_chat",
@@ -167,18 +156,64 @@ class AutoGenModule:
             "model_endpoint": "https://api.openai.com/v1",
             "context_window": 8192,
         }
-    def process_sow_plan(self, sow_plan: str):
+    async def process_semantic_kernel_results(self, results: Dict):
         """
-        Process the Statement of Work (SoW) plan and execute tasks based on its contents.
+        Process results from Semantic Kernel and execute tasks based on its contents.
         """
-        # Process SoW plan with Semantic Kernel
-        plan = self.semantic_kernel.process_input(sow_plan)
+        response = ""
 
-        # Execute tasks based on the plan
-        response = self.execute_plan(plan)
+        # Process each specified section
+        for section in ["Overview", "ProjectGoalsAndScope", "MethodologyAndWorkflow", "ExpectedDeliverables", "ResourceAllocationAndRoles"]:
+            if section in results:
+                content = results[section]
+                if isinstance(content, Dict):
+                    # Handling complex content within each section
+                    response += self.handle_complex_content(section, content)
+                else:
+                    # Handling simple content
+                    response += self.handle_section(section, content)
+
         return response
 
-     def create_builder(self) -> AgentBuilder:
+    def handle_complex_content(self, section_name: str, content: Dict) -> str:
+        """
+        Handle complex content within each section by integrating various functionalities.
+        """
+        complex_content_response = f"Handling Complex Content for {section_name}:\n"
+
+        # Use different methods based on the content requirements
+        for key, detail in content.items():
+            # Use generate_response for initial processing of the content
+            initial_processing = self.generate_response(detail)
+
+            # Use auto_generate for further content enhancement
+            enhanced_content = self.auto_generate(initial_processing)
+
+            # Use create_memgpt_agent for advanced processing and insights
+            memgpt_agent = self.create_memgpt_agent(section_name)
+            agent_response = memgpt_agent.process_input(detail)  # Assuming process_input method exists
+
+            # Use query_vector_db for fetching relevant data
+            vector_db_results = self.query_vector_db([detail.get('query', '')], 10)
+
+            # Combine responses
+            combined_response = f"Initial: {initial_processing}, Enhanced: {enhanced_content}, " \
+                                f"Agent: {agent_response}, DB Query: {vector_db_results}\n"
+            complex_content_response += f"{key}: {combined_response}\n"
+
+        return complex_content_response
+    def handle_section(self, section_name: str, content: str) -> str:
+        """
+        Handle simpler content for sections with straightforward information.
+        """
+        # Process the content using existing methods
+        initial_processing = self.generate_response(content)
+        enhanced_content = self.auto_generate(initial_processing)
+
+        # Combine and return the processed content
+        return f"{section_name}: Initial: {initial_processing}, Enhanced: {enhanced_content}\n"
+
+    def create_builder(self) -> AgentBuilder:
         """
         Create an instance of AgentBuilder.
         """

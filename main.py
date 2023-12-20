@@ -1,5 +1,6 @@
 import json
 import asyncio
+<<<<<<< HEAD
 from dotenv import load_dotenv
 from datetime import datetime
 from autogen.autogen_module import AutoGenModule
@@ -14,43 +15,29 @@ async def main():
     load_dotenv()
 
     # Load the configuration list for different LLMs
+=======
+import os
+from src.semantic_kernel.semantic_kernel_module import SemanticKernelDataModule
+from src.taskweaver.taskweaver_module import TaskWeaverDataProcessor
+from src.autogen.autogen_module import AutoGenModule
+
+async def main():
+>>>>>>> ac91e79fd632780ad30a01091b2579ef2a2240dc
     with open('OAI_CONFIG_LIST.json', 'r') as file:
         OAI_CONFIG_LIST = json.load(file)
-
-    # Extract Gemini configurations from the list
-    config_list_gemini = [config for config in OAI_CONFIG_LIST if 'gemini' in config["model"]]
-    config_list_gemini_vision = [config for config in OAI_CONFIG_LIST if 'gemini-pro-vision' in config["model"]]
-
-    # Initialize the AutoGenModule with the Semantic Kernel and Taskweaver modules
-    semantic_kernel = SemanticKernelModule()
-    taskweaver = TaskweaverModule()
-    agent_builder = AgentBuilder()
-
-    autogen_module = AutoGenModule()
+    semantic_kernel = SemanticKernelDataModule()
+    taskweaver = TaskWeaverDataProcessor()
+    autogen_module = AutoGenModule(memgpt_memory_path="<path_to_memgpt_memory>", openai_api_key=os.getenv('OPENAI_API_KEY'))
     autogen_module.semantic_kernel = semantic_kernel
     autogen_module.taskweaver = taskweaver
-    autogen_module.agent_builder = agent_builder
 
-    # Create Gemini RAG and Multimodal Agents
-    assistant = autogen_module.create_assistant_agent(name="Assistant")
-    user_proxy = autogen_module.create_user_proxy_agent(name="User_Proxy", max_auto_reply=3)
-    image_agent, _ = autogen_module.create_gemini_multimodal_agent()
-
-    # Get user input to trigger the UserProxyAgent and start the interaction
     user_input = input("Please provide a description for the task you'd like to perform: ")
 
-    # Use the user input to start the UserProxyAgent
-    await user_proxy.initiate_chat(assistant, message=user_input)
+    sow_document = await semantic_kernel.create_and_fetch_sow(user_input)
 
-    # Process the interaction based on the task description
-    task_description = user_input
-    agent_list, agent_configs = autogen_module.build_agents_for_task(task_description)
+    executed_plan = autogen_module.AutoGenModule(sow_document)
 
-    # Output the agents' results and configurations
-    for agent, config in zip(agent_list, agent_configs):
-        print(f"Agent: {agent}, Config: {config}")
-
-    # Additional logic for image agent interactions or other processes can be added here
+    print(f"Executed Plan: \n{executed_plan}")
 
 if __name__ == "__main__":
     asyncio.run(main())
